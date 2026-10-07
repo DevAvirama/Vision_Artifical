@@ -1,73 +1,64 @@
+import io
 import cv2
 import numpy as np
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from ultralytics import YOLO
 
-# 1. Cargar el modelo base de segmentación de YOLOv8
-# Se descargará automáticamente 'yolov8n-seg.pt' la primera vez que lo ejecutes
+app = FastAPI(title="Microservicio de Visión PorciTech")
+
+# Cargar el modelo de segmentación
+# (puedes usar 'best.pt' si es tu modelo entrenado o 'yolov8n-seg.pt')
 print("Cargando modelo de IA...")
-model = YOLO('yolov8n-seg.pt')
+model = YOLO('best.pt')
 
-# 2. Iniciar la cámara (0 suele ser la cámara web principal del PC)
-cap = cv2.VideoCapture(0)
-
-# Factor de calibración simulado (Píxeles a Kilos)
-# En producción para PorciTech, esto será reemplazado por tu modelo de regresión
+# Factor de calibración (Píxeles a Kilos)
 FACTOR_PIXELES_A_KILOS = 0.0005 
 
-print("Iniciando cámara... Presiona 'q' en la ventana de video para salir.")
+@app.get("/health")
+def health_check():
+    """Endpoint para verificar que el servicio está activo."""
+    return {"status": "ok", "service": "vision-artificial"}
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        print("No se pudo acceder a la cámara. Revisa los permisos en tu sistema.")
-        break
+@app.post("/estimar-peso")
+async def estimar_peso(file: UploadFile = File(...)):
+    """Recibe una imagen, segmenta el animal y calcula su peso estimado."""
+    # 1. Validar y leer los bytes de la imagen enviada
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    # 3. Ejecutar inferencia en el frame actual
-    # verbose=False evita que la terminal se llene de texto en cada frame
+    if frame is None:
+        raise HTTPException(status_code=400, detail="No se pudo decodificar la imagen enviada.")
+
+    # 2. Ejecutar inferencia con YOLO
     resultados = model(frame, verbose=False)
 
+    detecciones = []
+
     for resultado in resultados:
-        # Verificar si el modelo logró segmentar alguna silueta (máscaras)
         if resultado.masks is not None:
-            
-            # Iterar sobre cada objeto detectado en pantalla
-            for i, mask in enumerate(resultado.masks.xy):
-                # Convertir los puntos de la máscara a un formato compatible con OpenCV
+            for mask in resultado.masks.xy:
                 contorno = np.array(mask, dtype=np.int32)
-                
-                # 4. EXTRACCIÓN DE MÉTRICAS (Matemática visual)
-                # Calcular el Área en píxeles de la silueta
                 area_pixeles = cv2.contourArea(contorno)
-                
-                # Filtrar objetos muy pequeños (ruido visual)
+
+                # Filtrar ruido visual menor a 5000 px
                 if area_pixeles > 5000:
-                    # Calcular la caja delimitadora para obtener Largo y Ancho
                     x, y, w, h = cv2.boundingRect(contorno)
-                    
-                    # 5. SIMULACIÓN DEL PESO
                     peso_estimado = area_pixeles * FACTOR_PIXELES_A_KILOS
-                    
-                    # 6. DIBUJAR EN PANTALLA (Interfaz)
-                    # Dibujar el contorno exacto de la silueta en color verde
-                    cv2.polylines(frame, [contorno], isClosed=True, color=(0, 255, 0), thickness=2)
-                    
-                    # Dibujar la caja delimitadora en azul
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
-                    
-                    # Mostrar los datos en tiempo real
-                    texto_area = f"Area: {int(area_pixeles)} px"
-                    texto_peso = f"Peso est: {peso_estimado:.2f} kg"
-                    
-                    cv2.putText(frame, texto_area, (x, y - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                    cv2.putText(frame, texto_peso, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-    # Mostrar el video con los cálculos superpuestos
-    cv2.imshow('PorciTech - Prueba de Vision (Presiona Q para salir)', frame)
+                    detecciones.append({
+                        "area_pixeles": float(area_pixeles),
+                        "peso_estimado_kg": round(float(peso_estimado), 2),
+                        "bounding_box": {"x": int(x), "y": int(y), "ancho": int(w), "alto": int(h)}
+                    })
 
-    # Detener el script al presionar la tecla 'q'
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    if not detecciones:
+        return {
+            "mensaje": "No se detectó ningún animal con suficiente área en la imagen.",
+            "detecciones": []
+        }
 
-# Liberar los recursos de hardware
-cap.release()
-cv2.destroyAllWindows()
+    return {
+        "total_detectados": len(detecciones),
+        "detecciones": detecciones
+    }
