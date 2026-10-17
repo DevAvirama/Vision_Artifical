@@ -1,4 +1,9 @@
-# 👁️ Visión Artificial - Detección y Segmentación con YOLOv8
+# 👁️ Visión Artificial - Laboratorio Experimental y Prototipo (YOLOv8)
+
+> [!NOTE]
+> **Aviso de Arquitectura del Ecosistema PorciTech:**
+> Este directorio constituye el **laboratorio de prototipado y pruebas experimentales** de segmentación con YOLOv8. El **pipeline de producción oficial** (con calibración métrica por cm², cliente RTSP TCP para cámaras V380 Pro, persistencia en TimescaleDB y endpoints de FastAPI) se encuentra integrado y mantenido activamente en:
+> 👉 [`porcitech-backend/app/vision/`](../porcitech-backend/app/vision/)
 
 Proyecto de visión por computadora enfocado en inferencia y segmentación de instancias en tiempo real utilizando modelos **YOLOv8** (`yolov8n-seg`), estructurado con empaquetado moderno en Python y gestionado mediante el administrador de paquetes de alto rendimiento **`uv`**.
 
