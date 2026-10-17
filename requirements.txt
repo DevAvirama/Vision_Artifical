@@ -1,0 +1,6 @@
+torch torchvision --index-url https://download.pytorch.org/whl/cpu
+ultralytics
+opencv-python-headless
+fastapi
+uvicorn[standard]
+python-multipart
