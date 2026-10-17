@@ -86,6 +86,9 @@ class CapturaRTSPRequest(BaseModel):
 # ============================================================================
 # 3. MANEJADOR DE CONTEXTO LIFESPAN (INSTANCIACIÓN ÚNICA DEL MODELO YOLO)
 # ============================================================================
+MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB máximo por imagen
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     model_path = os.getenv("YOLO_MODEL_PATH", "best.pt")
@@ -97,6 +100,7 @@ async def lifespan(app: FastAPI):
     yolo_model.predict(source=dummy_frame, verbose=False)
 
     app.state.model = yolo_model
+    app.state.yolo_lock = asyncio.Lock()
     print("[PorciTech Vision] Modelo cargado y listo para inferencia de baja latencia.")
     yield
     app.state.model = None
@@ -335,20 +339,38 @@ async def estimar_peso(
     Recibe una imagen vía multipart/form-data (Next.js o Flutter),
     la decodifica en memoria RAM y ejecuta la inferencia en el threadpool.
     """
-    contents = await file.read()
+    contents = await file.read(MAX_IMAGE_UPLOAD_BYTES + 1)
     if not contents:
         raise HTTPException(status_code=400, detail="El archivo enviado está vacío.")
+    if len(contents) > MAX_IMAGE_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="La imagen supera el tamaño máximo permitido de 15 MB.",
+        )
+
+    yolo_lock: Optional[asyncio.Lock] = getattr(request.app.state, "yolo_lock", None)
 
     try:
         frame = await asyncio.to_thread(decodificar_imagen_ram_sync, contents)
-        resultado = await asyncio.to_thread(
-            procesar_frame_morfometria_sync,
-            model=request.app.state.model,
-            frame=frame,
-            pixels_per_cm_override=pixels_per_cm,
-            conf_threshold=conf_threshold,
-            validar_bordes=validar_bordes
-        )
+        if yolo_lock is not None:
+            async with yolo_lock:
+                resultado = await asyncio.to_thread(
+                    procesar_frame_morfometria_sync,
+                    model=request.app.state.model,
+                    frame=frame,
+                    pixels_per_cm_override=pixels_per_cm,
+                    conf_threshold=conf_threshold,
+                    validar_bordes=validar_bordes
+                )
+        else:
+            resultado = await asyncio.to_thread(
+                procesar_frame_morfometria_sync,
+                model=request.app.state.model,
+                frame=frame,
+                pixels_per_cm_override=pixels_per_cm,
+                conf_threshold=conf_threshold,
+                validar_bordes=validar_bordes
+            )
         return resultado
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -363,11 +385,16 @@ async def estimar_peso_desde_camara_rtsp(
     Se conecta directamente al stream RTSP de la cámara Wi-Fi V380 Pro,
     captura el fotograma en vivo sin lag y calcula el peso corporal estimado.
     """
-    rtsp_url = payload.rtsp_url or os.getenv("V380_RTSP_URL")
+    rtsp_url = (payload.rtsp_url or os.getenv("V380_RTSP_URL") or "").strip()
     if not rtsp_url:
         raise HTTPException(
             status_code=400,
             detail="Debe enviar 'rtsp_url' en el JSON o definir V380_RTSP_URL en las variables de entorno."
+        )
+    if not rtsp_url.lower().startswith(("rtsp://", "rtsps://")):
+        raise HTTPException(
+            status_code=400,
+            detail="La URL de la cámara debe utilizar el protocolo rtsp:// o rtsps://."
         )
 
     try:
@@ -377,15 +404,28 @@ async def estimar_peso_desde_camara_rtsp(
     except ValueError as e:
         raise HTTPException(status_code=504, detail=str(e))
 
+    yolo_lock: Optional[asyncio.Lock] = getattr(request.app.state, "yolo_lock", None)
+
     try:
-        resultado = await asyncio.to_thread(
-            procesar_frame_morfometria_sync,
-            model=request.app.state.model,
-            frame=frame,
-            pixels_per_cm_override=payload.pixels_per_cm,
-            conf_threshold=payload.conf_threshold,
-            validar_bordes=payload.validar_bordes
-        )
+        if yolo_lock is not None:
+            async with yolo_lock:
+                resultado = await asyncio.to_thread(
+                    procesar_frame_morfometria_sync,
+                    model=request.app.state.model,
+                    frame=frame,
+                    pixels_per_cm_override=payload.pixels_per_cm,
+                    conf_threshold=payload.conf_threshold,
+                    validar_bordes=payload.validar_bordes
+                )
+        else:
+            resultado = await asyncio.to_thread(
+                procesar_frame_morfometria_sync,
+                model=request.app.state.model,
+                frame=frame,
+                pixels_per_cm_override=payload.pixels_per_cm,
+                conf_threshold=payload.conf_threshold,
+                validar_bordes=payload.validar_bordes
+            )
         return resultado
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
