@@ -13,8 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from ultralytics import YOLO
 
-# Forzar transporte TCP y timeout de 5s en FFMPEG para streams RTSP Wi-Fi (V380 Pro)
+# Forzar transporte TCP y timeout de 5s en FFMPEG para streams RTSP de Dahua
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;5000000"
+
+DAHUA_DEFAULT_RTSP = "rtsp://admin:admin123@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0"
 
 # ============================================================================
 # 1. CONSTANTES DE CALIBRACIÓN ALOMÉTRICA Y ESCALA CENITAL
