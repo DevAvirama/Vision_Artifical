@@ -1,6 +1,9 @@
 .venv
 venv
 ENV
+.env
+.env.*
+!.env.example
 __pycache__
 *.pyc
 *.pyo
@@ -8,6 +11,7 @@ __pycache__
 .pytest_cache
 .git
 .gitignore
+.gitattributes
 .idea
 .vscode
 Dockerfile

@@ -1,0 +1,11 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+Dockerfile* text eol=lf
+.dockerignore text eol=lf
+.env* text eol=lf
+*.pt binary
+
