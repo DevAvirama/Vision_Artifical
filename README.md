@@ -24,6 +24,7 @@ Vision_Artificial/
 ├── calibracion_camara.json     # Archivo de persistencia de escala métrica (6.6 px/cm)
 ├── entrenar_xgboost.py         # Entrenador del regresor multivariable de Machine Learning
 ├── modelo_peso_xgboost.json    # Modelo entrenado de XGBoost activo en inferencia
+├── calibrar_corral.py          # Script de utilidad para calibrar cámara en 1 solo comando (foto o RTSP)
 ├── probar_inferencia.py        # Cliente de terminal para inferencia individual rápida
 ├── evaluar_lote.py             # Evaluador por lotes con cálculo de MAE, MAPE y R²
 └── src/
