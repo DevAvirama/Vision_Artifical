@@ -6,3 +6,6 @@ opencv-python-headless
 fastapi
 uvicorn[standard]
 python-multipart
+xgboost
+scipy
+httpx

@@ -13,14 +13,22 @@ Proyecto de visión por computadora enfocado en inferencia y segmentación de in
 
 ```text
 Vision_Artificial/
-├── .python-version        # Versión de Python fijada para el entorno
-├── pyproject.toml         # Configuración del paquete y dependencias
-├── uv.lock                # Bloqueo determinista de dependencias
-├── yolov8n-seg.pt         # Pesos preentrenados de YOLOv8 (Segmentación Nano)
-├── visionArtificial.py    # Script principal de ejecución e inferencia
+├── .python-version             # Versión de Python fijada para el entorno
+├── pyproject.toml              # Configuración del paquete y dependencias
+├── uv.lock                     # Bloqueo determinista de dependencias
+├── best.pt                     # Pesos entrenados del modelo de segmentación
+├── yolov8n-seg.pt              # Pesos base de YOLOv8 Segmentación
+├── visionArtificial.py         # Microservicio FastAPI con endpoints de pesaje y calibración
+├── generar_marcador_aruco.py   # Script de utilidad para generar el marcador ArUco físico
+├── marcador_aruco_id0_10cm.png # Marcador ArUco listo para imprimir (10 cm x 10 cm)
+├── calibracion_camara.json     # Archivo de persistencia de escala métrica (6.6 px/cm)
+├── entrenar_xgboost.py         # Entrenador del regresor multivariable de Machine Learning
+├── modelo_peso_xgboost.json    # Modelo entrenado de XGBoost activo en inferencia
+├── probar_inferencia.py        # Cliente de terminal para inferencia individual rápida
+├── evaluar_lote.py             # Evaluador por lotes con cálculo de MAE, MAPE y R²
 └── src/
     └── vision_artificial/
-        └── __init__.py    # Módulo raíz y punto de entrada de la aplicación
+        └── __init__.py         # Módulo raíz y punto de entrada de la aplicación
 ```
 
 ---
@@ -79,6 +87,29 @@ uv sync
 ```bash
 uv pip install ultralytics opencv-python torch torchvision
 ```
+
+---
+
+## 🎯 Calibración Métrica con Marcador ArUco (One-Time Setup)
+
+Para que el pesaje sea exacto y no dependa de estimaciones fijas de altura, el sistema implementa una **calibración previa persistente**:
+
+1. **Generar e imprimir el marcador:**
+   ```bash
+   uv run python generar_marcador_aruco.py
+   ```
+   Genera `marcador_aruco_id0_10cm.png` listo para imprimir a 10 cm × 10 cm en papel o vinilo rígido.
+
+2. **Calibrar la cámara (solo una vez con el corral vacío):**
+   * Coloca el marcador en el suelo en la zona de pesaje.
+   * Llama al endpoint de calibración:
+     * **Vía foto:** `POST /calibrar` enviando la foto del marcador.
+     * **Vía RTSP:** `POST /calibrar-rtsp` con `{"rtsp_url": "rtsp://..."}`.
+   * El sistema calcula los `pixels_per_cm` exactos y los guarda en `calibracion_camara.json`.
+
+3. **Retirar el marcador y operar normalmente:**
+   * Retira el marcador del corral para que los cerdos no lo ensucien ni lo dañen.
+   * Las peticiones diarias a `POST /estimar-peso` y `POST /estimar-peso-rtsp` leerán automáticamente la escala guardada.
 
 ---
 

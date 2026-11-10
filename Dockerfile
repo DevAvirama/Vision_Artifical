@@ -17,6 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 COPY best.pt .
 COPY visionArtificial.py .
 COPY main.py .
+COPY calibracion_camara.json .
+COPY modelo_peso_xgboost.json .
 
 EXPOSE 8001
 
