@@ -1,0 +1,9 @@
+{
+  "pixels_per_cm_base1280": 6.6,
+  "tamano_marcador_cm": 10.0,
+  "marcador_id": 0,
+  "resolucion_calibracion": "1280x720",
+  "ancho_referencia": 1280,
+  "fecha_calibracion": "2026-11-09T20:18:00.000000+00:00",
+  "estado": "calibrado_optimo_corral_6.6ppc"
+}
