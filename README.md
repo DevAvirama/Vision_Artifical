@@ -1,155 +1,52 @@
-# 👁️ Visión Artificial - Laboratorio Experimental y Prototipo (YOLOv8)
+# PorciTech Vision — Estimación Biométrica de Peso Sin Contacto
 
-> [!NOTE]
-> **Aviso de Arquitectura del Ecosistema PorciTech:**
-> Este directorio constituye el **laboratorio de prototipado y pruebas experimentales** de segmentación con YOLOv8. El **pipeline de producción oficial** (con calibración métrica por cm², cliente RTSP TCP para cámaras V380 Pro, persistencia en TimescaleDB y endpoints de FastAPI) se encuentra integrado y mantenido activamente en:
-> 👉 [`porcitech-backend/app/vision/`](../porcitech-backend/app/vision/)
+Worker contenerizado de visión por computador para el ecosistema **PorciTech**. Procesa flujos de video en tiempo real (`RTSP`) para estimar el peso vivo de ejemplares porcinos sin estrés ni contacto físico, combinando segmentación de instancias con **YOLOv8**, calibración métrica mediante marcadores fiduciarios **ArUco** y regresión tabular con **XGBoost**.
 
-Proyecto de visión por computadora enfocado en inferencia y segmentación de instancias en tiempo real utilizando modelos **YOLOv8** (`yolov8n-seg`), estructurado con empaquetado moderno en Python y gestionado mediante el administrador de paquetes de alto rendimiento **`uv`**.
+- **Caso de estudio técnico:** [santiagoavirama.dev/proyectos/porcitech](https://santiagoavirama.dev/proyectos/porcitech)
+- **Integración Backend:** [`DevAvirama/api_porcitech`](https://github.com/DevAvirama/api_porcitech)
 
 ---
 
-## 🏗️ Estructura del Proyecto
+## Pipeline de Inferencia Biométrica
 
-```text
-Vision_Artificial/
-├── .python-version             # Versión de Python fijada para el entorno
-├── pyproject.toml              # Configuración del paquete y dependencias
-├── uv.lock                     # Bloqueo determinista de dependencias
-├── best.pt                     # Pesos entrenados del modelo de segmentación
-├── yolov8n-seg.pt              # Pesos base de YOLOv8 Segmentación
-├── visionArtificial.py         # Microservicio FastAPI con endpoints de pesaje y calibración
-├── generar_marcador_aruco.py   # Script de utilidad para generar el marcador ArUco físico
-├── marcador_aruco_id0_10cm.png # Marcador ArUco listo para imprimir (10 cm x 10 cm)
-├── calibracion_camara.json     # Archivo de persistencia de escala métrica (6.6 px/cm)
-├── entrenar_xgboost.py         # Entrenador del regresor multivariable de Machine Learning
-├── modelo_peso_xgboost.json    # Modelo entrenado de XGBoost activo en inferencia
-├── calibrar_corral.py          # Script de utilidad para calibrar cámara en 1 solo comando (foto o RTSP)
-├── probar_inferencia.py        # Cliente de terminal para inferencia individual rápida
-├── evaluar_lote.py             # Evaluador por lotes con cálculo de MAE, MAPE y R²
-├── worker_rtsp_watcher.py      # Daemon autónomo de vigilancia continua y pesaje automático por RTSP
-└── src/
-    └── vision_artificial/
-        └── __init__.py         # Módulo raíz y punto de entrada de la aplicación
+```mermaid
+flowchart LR
+    RTSP[Flujo RTSP Cámara IP] --> CV[OpenCV Frame Capture & Filter]
+    CV --> ARUCO[Detección Marcador ArUco<br/>Calibración cm/px]
+    CV --> YOLO[YOLOv8 Segmentation<br/>Máscara Dorsal]
+    ARUCO --> FEAT[Extracción de Rasgos Métricos<br/>Área, Longitud, Ancho]
+    YOLO --> FEAT
+    FEAT --> XGB[Modelo Regresor XGBoost<br/>Estimación en kg]
+    XGB -->|POST /api/v1/pesajes| API[api_porcitech]
 ```
 
----
+### Fases del Algoritmo
 
-## 🛠️ Stack Tecnológico
-
-| Componente | Tecnología | Rol en el Proyecto |
-| :--- | :--- | :--- |
-| **Lenguaje** | Python 3.12+ 🐍 | Lenguaje base para procesamiento y pipelines de visión. |
-| **Framework de IA** | Ultralytics / YOLOv8 🧠 | Modelo de visión artificial para segmentación de instancias. |
-| **Procesamiento de Imagen** | OpenCV (`cv2`) 📷 | Captura de video/cámara y renderizado de máscaras. |
-| **Gestor de Paquetes** | `uv` ⚡ | Creación de entornos virtuales ultrarrápidos y resolución de dependencias. |
-| **Backend de Tensores** | PyTorch 🔥 | Motor de inferencia y aceleración por GPU/CPU. |
+1. **Ingesta y Filtrado Óptico (`OpenCV`):** Captura resiliente de cuadros desde cámaras RTSP con descarte automático de fotogramas desenfocados o con oclusión parcial.
+2. **Calibración Métrica (`ArUco`):** Identificación de marcadores fiduciarios de dimensiones físicas conocidas en el corral para calcular la relación real $\text{cm}/\text{px}$ y corregir distorsiones de perspectiva.
+3. **Segmentación Morfométrica (`YOLOv8`):** Aislamiento de la silueta dorsal del animal para extraer área superficial proyectada, longitud dorsal y perímetro.
+4. **Inferencia de Peso (`XGBoost`):** Predicción del peso en kilogramos a partir del vector de características calibradas y envío autenticado hacia `api_porcitech`.
 
 ---
 
-## ✨ Características Principales
+## Variables de Entorno
 
-* 🎯 **Segmentación de Instancias:** Detección de objetos y delimitación precisa de contornos/máscaras a nivel de píxel.
-* ⚡ **Modelo Ultraliviano:** Uso de `yolov8n-seg.pt` optimizado para alta tasa de cuadros por segundo (FPS) en CPUs y GPUs.
-* 📦 **Gestión Moderna con `uv`:** Entorno virtual reproducible y tiempos de instalación en milisegundos.
-* 🔄 **Soporte Multi-fuente:** Procesamiento directo desde cámara web en vivo, archivos de video o imágenes estáticas.
+| Variable               | Descripción                                         | Ejemplo                                    |
+| :--------------------- | :-------------------------------------------------- | :----------------------------------------- |
+| `RTSP_STREAM_URL`      | URI del flujo de video de la cámara IP              | `rtsp://user:pass@192.168.1.50:554/stream` |
+| `API_CORE_URL`         | Endpoint base de `api_porcitech`                    | `http://api_porcitech:8000/api/v1`         |
+| `WORKER_API_TOKEN`     | Token de autenticación del servicio                 | `eyJhbGciOi...`                            |
+| `ARUCO_MARKER_SIZE_CM` | Lado físico real del marcador ArUco instalado       | `15.0`                                     |
+| `CONFIDENCE_THRESHOLD` | Umbral mínimo de confianza para segmentación YOLOv8 | `0.80`                                     |
 
 ---
 
-## 🚀 Instalación y Configuración
+## Ejecución en Contenedor
 
-### 1. Clonar el repositorio
 ```bash
-git clone [https://github.com/tu-usuario/Vision_Artificial.git](https://github.com/tu-usuario/Vision_Artificial.git)
+git clone [https://github.com/DevAvirama/Vision_Artificial.git](https://github.com/DevAvirama/Vision_Artificial.git)
 cd Vision_Artificial
-```
-
-### 2. Crear y activar el entorno virtual con `uv`
-
-* **En terminal `fish` (Garuda Linux):**
-  ```fish
-  uv venv
-  source .venv/bin/activate.fish
-  ```
-
-* **En terminal `bash` / `zsh`:**
-  ```bash
-  uv venv
-  source .venv/bin/activate
-  ```
-
-### 3. Instalar dependencias
-
-Sincroniza el entorno directamente desde el archivo `uv.lock` o `pyproject.toml`:
-```bash
-uv sync
-```
-
-*(Alternativa manual con `uv pip`):*
-```bash
-uv pip install ultralytics opencv-python torch torchvision
-```
-
----
-
-## 🎯 Calibración Métrica con Marcador ArUco (One-Time Setup)
-
-Para que el pesaje sea exacto y no dependa de estimaciones fijas de altura, el sistema implementa una **calibración previa persistente**:
-
-1. **Generar e imprimir el marcador:**
-   ```bash
-   uv run python generar_marcador_aruco.py
-   ```
-   Genera `marcador_aruco_id0_10cm.png` listo para imprimir a 10 cm × 10 cm en papel o vinilo rígido.
-
-2. **Calibrar la cámara (solo una vez con el corral vacío):**
-   * Coloca el marcador en el suelo en la zona de pesaje.
-   * Llama al endpoint de calibración:
-     * **Vía foto:** `POST /calibrar` enviando la foto del marcador.
-     * **Vía RTSP:** `POST /calibrar-rtsp` con `{"rtsp_url": "rtsp://..."}`.
-   * El sistema calcula los `pixels_per_cm` exactos y los guarda en `calibracion_camara.json`.
-
-3. **Retirar el marcador y operar normalmente:**
-   * Retira el marcador del corral para que los cerdos no lo ensucien ni lo dañen.
-   * Las peticiones diarias a `POST /estimar-peso` y `POST /estimar-peso-rtsp` leerán automáticamente la escala guardada.
-
----
-
-## 🎮 Ejecución y Pruebas
-
-### Inferencia básica con el script principal
-```bash
-uv run python visionArtificial.py
-```
-
-### Inferencia directa desde el módulo
-```bash
-uv run python -m vision_artificial
-```
-
-### Ejemplo de uso en código (`visionArtificial.py`)
-```python
-from ultralytics import YOLO
-import cv2
-
-# Cargar el modelo de segmentación
-model = YOLO("yolov8n-seg.pt")
-
-# Ejecutar inferencia en vivo con la cámara web (índice 0)
-results = model.predict(source="0", show=True, conf=0.5)
-```
-
----
-
-## ⚙️ Comandos de Mantenimiento y Control
-
-```bash
-# Agregar una nueva librería al proyecto
-uv add numpy
-
-# Actualizar todas las dependencias
-uv lock --upgrade
-
-# Ejecutar pruebas o scripts dentro del entorno
-uv run python visionArtificial.py
+cp .env.example .env
+docker build -t porcitech-vision .
+docker run -d --name porcitech-vision --restart unless-stopped --env-file .env porcitech-vision
 ```
